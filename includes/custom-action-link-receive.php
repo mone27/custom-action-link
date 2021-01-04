@@ -1,6 +1,9 @@
 <?php
 
-add_action('init', 'cacl_check_request');
+function cacl_receive_setup_hooks(){
+    add_action('init', 'cacl_check_request');
+}
+
 
 function cacl_check_request() {
     if ( isset( $_REQUEST['action_link_key'] ) and isset( $_REQUEST['action_link_id'] )) {
@@ -10,7 +13,17 @@ function cacl_check_request() {
 
         if ($key_valid == true) {
             $data = maybe_unserialize($data);
-            do_action('cacl_receive_data', $data);
+
+            $success = cacl_set_pmpro_level($data);
+
+            if ($success){
+                wp_safe_redirect(SUCCESS_PAGE);
+                exit;
+            }
+            else {
+                echo "An error occurred in submitting the action link";
+            }
+
         }
 
     }
@@ -24,7 +37,7 @@ function cacl_check_request() {
  * @since    1.0.0
  * @param      string    $key  The action unique key.
  *
- * @retun array $key_valid, $data
+ * @return array $key_valid, $data
  */
 function cacl_check_key($key, $id){
     global $wp_hasher;
@@ -36,7 +49,7 @@ function cacl_check_key($key, $id){
     }
 
     // Get the key from the db
-    $table_name = $wpdb->prefix . "action_link_db";
+    $table_name = CACL_TABLE_NAME;
     $action = $wpdb->get_row($wpdb->prepare ( "SELECT * FROM $table_name WHERE id=%d", $id) , ARRAY_A);
 
     if (null !== $action){
@@ -49,7 +62,7 @@ function cacl_check_key($key, $id){
 
 }
 
-add_action('cacl_receive_data', 'cacl_set_pmpro_level', 10, 1);
+
 
 /**
  * Add user to a pmpro membership level
@@ -79,5 +92,7 @@ function cacl_set_pmpro_level($data){
         error_log("ACL: Problem in changing membership level for". $user_id. " to level ". MEMBERSHIP_LEVEL );
         return false;
     }
+
+    return true;
 
 }

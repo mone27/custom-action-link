@@ -3,8 +3,15 @@
  * Code to send the custom action link
  */
 
+function cacl_send_setup_hooks(){
+    add_action( 'wpcf7_before_send_mail', 'cacl_on_form_submission', 10, 3 );
+
+    add_action("cacl_send_data", 'cacl_send_email', 10, 3);
+    add_action('cacl_send_data', 'cacl_create_user', 10, 3);
+}
+
 // Register action to run on every contact form 7 submission
-add_action( 'wpcf7_before_send_mail', 'cacl_on_form_submission', 10, 3 );
+
 
 function cacl_on_form_submission($contact_form, $abort, $form_submission) {
     if ($contact_form->id() == ACL_FORM_ID){
@@ -13,7 +20,15 @@ function cacl_on_form_submission($contact_form, $abort, $form_submission) {
         $data = $form_submission->get_posted_data();
         [$key, $id]  = cacl_generate_key($data);
 
-        do_action('cacl_send_data', $key, $id ,$data);
+        $success = cacl_create_user($data);
+        if ($success){
+           $success = cacl_send_email($key, $id, $data);
+        }
+
+        if (!$success){
+            echo "An error occurred in form processing";
+            // Need to find a way to give a feedback to the form
+        }
 
     }
 
@@ -42,7 +57,7 @@ function cacl_generate_key($data){
     }
 
 
-    $res = $wpdb->insert($wpdb->prefix."action_link_db", [
+    $res = $wpdb->insert(CACL_TABLE_NAME, [
             'action_link_key' => $wp_hasher->HashPassword( $key ),
             'data' => maybe_serialize($data)
         ]
@@ -57,12 +72,11 @@ function cacl_generate_key($data){
 
 /* -------------- actions to send data -------------------- */
 
-
-add_action("cacl_send_data", 'cacl_send_email', 10, 3);
-add_action('cacl_send_data', 'cacl_create_user', 10, 3);
-
-function cacl_create_user($key, $id, $data){
-    // need to do something here
+/**
+ * Send an email with the action link
+ * @param $data array the data from the form
+ */
+function cacl_create_user($data){
     $userdata = [
         'user_login' => $data['member-first-name']." ".$data['member-last-name'],
         'user_email' => $data['member-email'],
@@ -73,12 +87,20 @@ function cacl_create_user($key, $id, $data){
     $res = wp_insert_user($userdata);
 
     if (!is_int($res)){ //If everything okay $red is the user id
-        error_log("ACL: create user:".$res);
+        // Need to report back to form submission that something is going wrong!!
+        error_log("ACL: create user:".$res->get_error_message());
+        return false;
     }
+
+    return true;
 }
+
 /**
  * Send an email with the action link
- **/
+ * @param $key string the key that needs to sent
+ * @param $id int the action_link id
+ * @param $data array the data from the form
+ */
 function cacl_send_email($key, $id, $data){
 
     $to = $data['member-email'];
@@ -106,6 +128,9 @@ function cacl_send_email($key, $id, $data){
 
     if(!$res){
         error_log("ACL: Problem in sending email to ".$to);
+        return false;
     }
+
+    return true;
 
 }
