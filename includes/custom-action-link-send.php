@@ -4,30 +4,36 @@
  */
 
 function cacl_send_setup_hooks(){
+    // Register action to run on every contact form 7 submission before sending the mail
     add_action( 'wpcf7_before_send_mail', 'cacl_on_form_submission', 10, 3 );
 
-    add_action("cacl_send_data", 'cacl_send_email', 10, 3);
-    add_action('cacl_send_data', 'cacl_create_user', 10, 3);
 }
 
-// Register action to run on every contact form 7 submission
 
-
-function cacl_on_form_submission($contact_form, $abort, $form_submission) {
+function cacl_on_form_submission($contact_form, &$abort, $form_submission) {
     if ($contact_form->id() == ACL_FORM_ID){
-        // do something with form_submission
 
+        /** Generate a key and save the associated data in the db */
         $data = $form_submission->get_posted_data();
-        [$key, $id]  = cacl_generate_key($data);
+        $res = cacl_generate_key($data);
+        if (is_wp_error($res)) {
+            $form_submission->set_response($res->get_error_message());
+            $abort = true;
+        }
+        [$key, $id]  = $res;
 
+        /** Create the user */
         $success = cacl_create_user($data);
-        if ($success){
-           $success = cacl_send_email($key, $id, $data);
+        if (is_wp_error($success)) {
+            $form_submission->set_response($success->get_error_message());
+            $abort = true;
         }
 
-        if (!$success){
-            echo "An error occurred in form processing";
-            // Need to find a way to give a feedback to the form
+        /** Send the email to the LC */
+        $success = cacl_send_email($key, $id, $data);
+        if (is_wp_error($success)) {
+            $form_submission->set_response($success->get_error_message());
+            $abort = true;
         }
 
     }
@@ -39,8 +45,7 @@ function cacl_on_form_submission($contact_form, $abort, $form_submission) {
  * Generate a unique key and stores in the db alongside with data
  *
  * @param mixed $data the array that should be saved alongside the key
- * @return array $key, $id the generated key after being inserted into the db
- * @since    1.0.0
+ * @return array | WP_Error $key, $id the generated key after being inserted into the db
  */
 function cacl_generate_key($data){
     // insert the key and the data in the database
@@ -63,6 +68,10 @@ function cacl_generate_key($data){
         ]
     );
 
+    if ($res == false){
+        return new WP_Error("cacl_key_creatation", "Error in creating key. Contact your website adminstator");
+    }
+
     $id = $wpdb->insert_id;
 
     return [$key, $id];
@@ -75,6 +84,7 @@ function cacl_generate_key($data){
 /**
  * Send an email with the action link
  * @param $data array the data from the form
+ * @return bool|WP_Error
  */
 function cacl_create_user($data){
     $userdata = [
@@ -88,8 +98,8 @@ function cacl_create_user($data){
 
     if (!is_int($res)){ //If everything okay $red is the user id
         // Need to report back to form submission that something is going wrong!!
-        error_log("ACL: create user:".$res->get_error_message());
-        return false;
+        error_log("CACL: create user:".$res->get_error_message());
+        return new WP_Error("cacl_create_user", $res->get_error_message());
     }
 
     return true;
@@ -100,12 +110,19 @@ function cacl_create_user($data){
  * @param $key string the key that needs to sent
  * @param $id int the action_link id
  * @param $data array the data from the form
+ * @return bool|WP_Error
  */
 function cacl_send_email($key, $id, $data){
 
-    $to = $data['member-email'];
+    $to = $data['lc-email'];
     $subject = "Verify IFSA Member";
-    $content = "Use this link to verify that {$data['member-first-name']} is a member of your LC [action_link Verify]";
+    $content = "Dear IFSA LC,<br>
+                A member of your LC has requested a verification process. <br>
+                If {$data['member-first-name']} {$data['member-last-name']} is a member of your LC verify them by clicking on <br> 
+                [action_link Verify Member] <br>
+                If {$data['member-first-name']} is not from your LC or you are not sure <strong>ignore </strong>this email.
+                <br><br>
+                For any question get in touch with web@ifsa.net";
 
     $action_link_regex = '@\[action_link[[:space:]](.*)\]@';
 
@@ -120,15 +137,16 @@ function cacl_send_email($key, $id, $data){
 
     $action_link_html = "<a href=$link>$link_name </a>";
 
-    $header = "Content-Type: text/html; charset=UTF-8";
+    $header = "Content-Type: text/html; charset=UTF-8 \n Reply-To: web@ifsa.net";
 
     $content = preg_replace($action_link_regex, $action_link_html, $content);
 
     $res = wp_mail($to, $subject, $content, $header);
 
     if(!$res){
-        error_log("ACL: Problem in sending email to ".$to);
-        return false;
+        error_log("CACL: Problem in sending email to ".$to);
+        return new WP_Error("CACL", "Problem in sending email.
+         Try again later of contact website administrator if the problem persists");
     }
 
     return true;

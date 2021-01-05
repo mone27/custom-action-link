@@ -4,6 +4,11 @@ function cacl_receive_setup_hooks(){
     add_action('init', 'cacl_check_request');
 }
 
+//add_filter('the_content', 'breakpoint');
+//
+//function breakpoint($content){
+//    $content;
+//}
 
 function cacl_check_request() {
     if ( isset( $_REQUEST['action_link_key'] ) and isset( $_REQUEST['action_link_id'] )) {
@@ -17,11 +22,15 @@ function cacl_check_request() {
             $success = cacl_set_pmpro_level($data);
 
             if ($success){
+
+                calc_receive_email_admin($data);
+                calc_receive_email_user($data);
+
                 wp_safe_redirect(SUCCESS_PAGE);
                 exit;
             }
             else {
-                echo "An error occurred in submitting the action link";
+                error_log("An error occurred in submitting the action link");
             }
 
         }
@@ -34,10 +43,11 @@ function cacl_check_request() {
  * Returns an array where the first element is a bool if the key is valid or not
  * the second element is the associated data from the db.
  *
- * @since    1.0.0
- * @param      string    $key  The action unique key.
+ * @param string $key The action unique key.
  *
+ * @param $id
  * @return array $key_valid, $data
+ * @since    1.0.0
  */
 function cacl_check_key($key, $id){
     global $wp_hasher;
@@ -79,7 +89,7 @@ function cacl_set_pmpro_level($data){
         return false;
     }
 
-    $current_level    = pmpro_getMembershipLevelForUser( $user_id );
+    $current_level  = pmpro_getMembershipLevelForUser( $user_id );
 
     if ( !empty( $current_level ) && absint( $current_level->ID ) == MEMBERSHIP_LEVEL ) {
         // Membership level is already active
@@ -89,10 +99,34 @@ function cacl_set_pmpro_level($data){
     $new_level = pmpro_changeMembershipLevel(MEMBERSHIP_LEVEL, $user_id);
 
     if (!$new_level){
-        error_log("ACL: Problem in changing membership level for". $user_id. " to level ". MEMBERSHIP_LEVEL );
+        error_log("CACL: Problem in changing membership level for". $user_id. " to level ". MEMBERSHIP_LEVEL );
         return false;
     }
 
     return true;
 
+}
+
+function calc_receive_email_admin($data){
+    $to = ADMIN_EMAIL;
+    $subject = "User membership confirmed";
+    $content = "Dear website admin,
+    the user {$data['member-first-name']} {$data['member-first-name']} with email {$data['member-email']} \
+    has just been approved by {$data['lc-email']}";
+
+    return wp_mail($to, $subject, $content);
+
+}
+
+function calc_receive_email_user($data){
+    $to = $data['member-email'];
+    $subject = "Your membership has been approved";
+    $content = "Dear {$data['member-first-name']},<br>
+    your IFSA membership has been successfully approved.<br>
+    Now you can start using <a href='https://ifsa.net/treehouse'>Tree House </a> and setup your profile. 
+    ";
+
+    $header = "Content-Type: text/html; charset=UTF-8 \n Reply-To: web@ifsa.net";
+
+    return wp_mail($to, $subject, $content, $header);
 }

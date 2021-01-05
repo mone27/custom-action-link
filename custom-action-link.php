@@ -34,6 +34,10 @@ if (!defined('MEMBERSHIP_LEVEL')){
     define('MEMBERSHIP_LEVEL', '1');
 }
 
+if (!defined('ADMIN_EMAIL')){
+    define('ADMIN_EMAIL', 'web@ifsa.net');
+}
+
 if (!defined('CACL_TABLE_NAME')){
     global $wpdb;
     define('CACL_TABLE_NAME', $wpdb->prefix."action_link_db");
