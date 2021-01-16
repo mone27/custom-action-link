@@ -26,10 +26,6 @@ if (!defined('ACL_FORM_ID')){
     define('ACL_FORM_ID', '16');
 }
 
-if (!defined('SUCCESS_PAGE')){
-    define('SUCCESS_PAGE', 'http://127.0.0.1:8012/?p=1');
-}
-
 if (!defined('MEMBERSHIP_LEVEL')){
     define('MEMBERSHIP_LEVEL', '1');
 }
